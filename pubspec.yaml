@@ -61,10 +61,10 @@ dev_dependencies:
 flutter:
   assets:
       - .env
-      - nissan-seeklogo.png  # Keep original paths for backward compatibility
-      - icons8-engine-oil-48.png
-      - icons8-tire-pressure-50.png
-      - assets/  # Include the entire assets directory
+      - assets/nissan-seeklogo.png
+      - assets/icons8-engine-oil-48.png
+      - assets/icons8-tire-pressure-50.png
+      - assets/
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

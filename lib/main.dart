@@ -146,7 +146,10 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isProcessing = false;
   var chatEntries = <ChatEntry>[];
   
-
+  // Weather preferences
+  String _lastWeatherLocation = 'Delhi, India';
+  String _lastWeatherFormat = 'celsius';
+  
 
   void appendNewChatMessage(evi.ChatMessage chatMessage, evi.Inference models) {
     final role = chatMessage.role == 'assistant' ? Role.assistant : Role.user;
@@ -513,52 +516,60 @@ class _MyHomePageState extends State<MyHomePage> {
       debugPrint("Parameters type: ${params.runtimeType}");
       debugPrint("Raw parameters: ${jsonEncode(params)}");
       
-      // Get the parameters from the tool call
-      String location = 'Delhi, India'; // Default location - using a different default than before
-      String format = 'celsius'; // Default format unit
-      
+      // Start with the last used preferences or defaults
+      String location = _lastWeatherLocation;
+      String format = _lastWeatherFormat;
+
+      // If parameters are empty, try to extract location from the last user message
+      if (params.isEmpty && chatEntries.isNotEmpty) {
+        // Look for the last user message
+        for (int i = chatEntries.length - 1; i >= 0; i--) {
+          if (chatEntries[i].role == Role.user) {
+            final userMessage = chatEntries[i].content.toLowerCase();
+            debugPrint("Analyzing user message: $userMessage");
+            
+            // Try to find city name in user message
+            List<String> possibleCityNames = _extractPossibleCities(userMessage);
+            if (possibleCityNames.isNotEmpty) {
+              location = possibleCityNames.first;
+              _lastWeatherLocation = location;
+              debugPrint("Extracted location from user message: $location");
+            }
+            break;
+          }
+        }
+      }
+
       try {
-        // Check if we have parameters in the JSON object
-        if (params.isNotEmpty) {
-          // Extract location parameter
-          if (params.containsKey('location') && 
-              params['location'] != null && 
-              params['location'].toString().trim().isNotEmpty) {
-            location = params['location'].toString().trim();
-            debugPrint("Using requested location: $location");
-          }
-          
-          // Extract format parameter
-          if (params.containsKey('format') && 
-              params['format'] != null &&
-              params['format'].toString().trim().isNotEmpty) {
-            format = params['format'].toString().trim().toLowerCase();
-            debugPrint("Using requested format: $format");
-          }
+        // 1. Try to extract 'location' parameter directly
+        if (params.containsKey('location') &&
+            params['location'] != null &&
+            params['location'].toString().trim().isNotEmpty) {
+          location = params['location'].toString().trim();
+          debugPrint("Using location from params: $location");
+          _lastWeatherLocation = location;
         } else {
-          // Check raw parameters string for location and format
-          // This is a fallback mechanism for when the parameters aren't properly parsed
-          final toolCallStr = toolName.toLowerCase();
-          
-          // Check for common city names in the tool name
-          final commonCities = ['delhi', 'london', 'tokyo', 'paris', 'berlin', 'rome', 'madrid', 'moscow', 'new york'];
-          for (final city in commonCities) {
-            if (toolCallStr.contains(city)) {
-              location = city;
-              debugPrint("Found city name in tool call: $location");
+          // 2. If 'location' is not present, try to extract the first non-empty string value
+          for (var value in params.values) {
+            if (value != null && value.toString().trim().isNotEmpty) {
+              location = value.toString().trim();
+              debugPrint("Using first non-empty value as location: $location");
+              _lastWeatherLocation = location;
               break;
             }
           }
-          
-          // Check for temperature formats
-          if (toolCallStr.contains('celsius') || toolCallStr.contains('c')) {
-            format = 'celsius';
-          } else if (toolCallStr.contains('fahrenheit') || toolCallStr.contains('f')) {
-            format = 'fahrenheit';
-          }
         }
-        
-        debugPrint("Using location: $location, format: $format");
+
+        // 3. Extract 'format' parameter if present
+        if (params.containsKey('format') &&
+            params['format'] != null &&
+            params['format'].toString().trim().isNotEmpty) {
+          format = params['format'].toString().trim().toLowerCase();
+          debugPrint("Using format from params: $format");
+          _lastWeatherFormat = format;
+        }
+
+        debugPrint("Final weather params: location=$location, format=$format");
       } catch (e) {
         debugPrint("Error extracting parameters: $e");
       }
@@ -661,5 +672,19 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _stopRecording() {
     _audio.stopRecording();
+  }
+
+  List<String> _extractPossibleCities(String userMessage) {
+    // Improved regex patterns to capture city names more effectively
+    final RegExp cityNamePattern = RegExp(
+      r'\b(?:in|at|for|to)\s+([A-Za-z\s-]+)(?:\s+weather|\s+forecast)?\b',
+      caseSensitive: false,
+    );
+
+    final matches = cityNamePattern.allMatches(userMessage);
+    return matches.map((match) {
+      // Return the first capturing group which should be the city name
+      return match.group(1)?.trim() ?? '';
+    }).where((city) => city.isNotEmpty).toList();
   }
 }
